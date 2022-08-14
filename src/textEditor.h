@@ -1,7 +1,7 @@
 #ifndef _TEXTEDITOR_H
 #define _TEXTEDITOR_H
 
-// includes
+// includes and defines for includes
 #define _DEFAULT_SOURCE
 #define _BSD_SOURCE
 #define _GNU_SOURCE
@@ -19,13 +19,14 @@
 #include <string.h>
 #include <fcntl.h>
 
-// defines
+// custom defines
 #define CTRL_KEY(k) ((k) & 0x1f)
 #define BUF_INIT {NULL, 0}
 #define VERSION "1.0.0"
 #define TAB_SPACE 4
 #define QUIT_TIMES 1
 
+// enums for key inputs
 enum keys {
     BACKSPACE = 127,
     ARROW_LEFT = 1000,
@@ -39,7 +40,7 @@ enum keys {
     PAGE_DOWN
 };
 
-// data
+// custom structs
 typedef struct erow {
     int size;
     int renderSize;
