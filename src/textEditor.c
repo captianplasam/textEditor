@@ -2,13 +2,14 @@
 
 // setup
 int main(int argc, char *argv[]) {
+    // enabling raw mode and initialising editor
     enableRawMode();
     initEditor();
     if (argc >= 2) {
-        openFile(argv[1]);
+        openFile(argv[1]); // opening the file
     }
-    setStatusMessage("HELP: CTRL-S to save, CTRL-F to search, CTRL-Q to quit");
-    while (1) {
+    setStatusMessage("HELP: CTRL-S to save, CTRL-F to search, CTRL-Q to quit"); // sets a status message at the bottom of the screen
+    while (1) { // constantly updates the screen with user inputs
         rewriteScreen();
         processKeyPress();
     }
@@ -17,6 +18,7 @@ int main(int argc, char *argv[]) {
 }
 
 void initEditor() {
+    // initialises the editor with all base values
     config.cursorX = 0;
     config.cursorY = 0;
     config.renderX = 0;
@@ -36,13 +38,14 @@ void initEditor() {
 
 // Raw Mode Disable And Enable
 void enableRawMode() {
-    if (tcgetattr(STDIN_FILENO, &config.origTermios) == -1) {
+    if (tcgetattr(STDIN_FILENO, &config.origTermios) == -1) { // checks it can get the parameter of the terminal
         die("tcgetattr");
     }
-    atexit(disableRawMode);
+    atexit(disableRawMode); // runs disableRawMode when exiting program
 
-    struct termios raw = config.origTermios;
+    struct termios raw = config.origTermios; // setting the properties of the terminal to origTermios in config
 
+    // sets the flages for the terminal to turn it into an editor
     raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
     raw.c_oflag &= ~(OPOST);
     raw.c_cflag &= ~(CS8);
@@ -50,12 +53,12 @@ void enableRawMode() {
     raw.c_cc[VMIN] = 0;
     raw.c_cc[VTIME] = 1;
 
-    if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1) {
+    if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1) { // sets the attributes 
         die("tcsetattr");
     }
 }
 
-void disableRawMode() {
+void disableRawMode() { // disables raw mode on exit
     if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &config.origTermios) == -1) {
         die("tcsetattr");
     }
@@ -63,14 +66,14 @@ void disableRawMode() {
 
 //Keyboard Input
 void processKeyPress() {
-    int c = readKeyPress(), times;
-    static int quitTimes = QUIT_TIMES;
+    int c = readKeyPress(), times; // reads the key press from the user
+    static int quitTimes = QUIT_TIMES; // sets a quit confirm for control q click
 
-    switch (c) {
-        case '\r':
+    switch (c) { // takes in a key press from the user 
+        case '\r': // detects enter key
             insertNewLine();
             break;
-        case CTRL_KEY('q'):
+        case CTRL_KEY('q'): // detects control q for quiting 
             if (config.dirty && quitTimes > 0) {
                 setStatusMessage("File has unsaved changes press CTRL-Q %d times to quit without saving", quitTimes);
                 quitTimes--;
@@ -80,30 +83,30 @@ void processKeyPress() {
             write(STDOUT_FILENO, "\x1b[H", 3);
             exit(0);
             break;
-        case CTRL_KEY('s'):
+        case CTRL_KEY('s'): // saves the program on control s click
             save();
             break;
-        case HOME_KEY:
+        case HOME_KEY: // returns to start of file on home click
             config.cursorX = 0;
             break;
-        case END_KEY:
+        case END_KEY: // goes to the end of the file on end press click
             if (config.cursorY < config.numrows) {
                 config.cursorX = config.currentRow[config.cursorY].size;
             }
             break;
-        case CTRL_KEY('f'):
+        case CTRL_KEY('f'): // brings up a search box on control f click
             find();
             break;
         case BACKSPACE:
         case CTRL_KEY('h'):
-        case DEL_KEY:
+        case DEL_KEY: // deletes a character on backspace, control h or the del key
             if (c == DEL_KEY) {
                 moveCursor(ARROW_RIGHT);
             }
             deleteChar();
             break;
         case PAGE_UP:
-        case PAGE_DOWN:
+        case PAGE_DOWN: // either goes page up or page down whether page up or page down clicked respectively
             if (c == PAGE_UP) {
                 config.cursorY = config.rowOffset;
             } else if (c == PAGE_DOWN) {
@@ -120,43 +123,43 @@ void processKeyPress() {
         case ARROW_UP:
         case ARROW_DOWN:
         case ARROW_LEFT:
-        case ARROW_RIGHT:
+        case ARROW_RIGHT: // setting the cursor move key presses for the arrow keys
             moveCursor(c);
             break;
         case CTRL_KEY('l'):
-        case '\x1b':
+        case '\x1b': // detects contrl l or escape seqeunce and does nothing
             break;
-        default:
+        default: // defaults to insert character in file
             insertChar(c);
             break;
     }
     quitTimes = QUIT_TIMES;
 }
 
-int readKeyPress() {
+int readKeyPress() { // reads a key from the user
     int nread;
     char c, seq[3];
 
-    while ((nread = read(STDIN_FILENO, &c, 1)) != 1) {
+    while ((nread = read(STDIN_FILENO, &c, 1)) != 1) { // tries to read a key from the user
         if (nread == -1 && errno != EAGAIN) {
-            die("read");
+            die("read"); // dies if fails
         }
     }
 
-    if (c == '\x1b') {
+    if (c == '\x1b') { // checks if the keypress is there
         if (read(STDIN_FILENO, &seq[0], 1) != 1) {
             return '\x1b';
         }
         if (read(STDIN_FILENO, &seq[1], 1 ) != 1) {
             return '\x1b';
         } 
-        if (seq[0] == '[') {
+        if (seq[0] == '[') { // reads the keypress from the seq
             if (seq[1] >= '0' && seq[1] <= '9') {
                 if (read(STDIN_FILENO, &seq[2], 1) != 1) {
                     return '\x1b';
                 }
                 if (seq[2] == '~') {
-                    switch (seq[1]) {
+                    switch (seq[1]) { // assigns each case to a custom enum number
                         case '1':
                             return HOME_KEY;
                         case '3':
@@ -174,7 +177,7 @@ int readKeyPress() {
                     }
                 }
             } else {
-                switch (seq[1]) {
+                switch (seq[1]) { // checks for arrow presses or home and end key press
                     case 'A':
                         return ARROW_UP;
                     case 'B':
@@ -189,7 +192,7 @@ int readKeyPress() {
                         return END_KEY;
                 }
             }
-        } else if (seq[0] == 'O') {
+        } else if (seq[0] == 'O') { // checks home key and end key presses
             switch (seq[1]) {
                 case 'H':
                     return HOME_KEY;
@@ -203,12 +206,12 @@ int readKeyPress() {
     }
 }
 
-void moveCursor(int key) {
+void moveCursor(int key) { // moves the cursor in a direction
     int rowLen;
     erow *row = (config.cursorY >= config.numrows) ? NULL : &config.currentRow[config.cursorY];
 
-    switch (key) {
-        case ARROW_LEFT:
+    switch (key) { // checks which arrow is pressed
+        case ARROW_LEFT: //moves left
             if (config.cursorX != 0) {
                 config.cursorX--;
             } else if (config.cursorY > 0) {
@@ -216,7 +219,7 @@ void moveCursor(int key) {
                 config.cursorX = config.currentRow[config.cursorY].size;
             }
             break;
-        case ARROW_RIGHT:
+        case ARROW_RIGHT: // moves right
             if (row && config.cursorX < row->size) {
                 config.cursorX++;
             } else if (row && config.cursorX == row->size) {
@@ -224,17 +227,18 @@ void moveCursor(int key) {
                 config.cursorX = 0;
             }
             break;
-        case ARROW_UP:
+        case ARROW_UP: // moves right
             if (config.cursorY != 0) {
                 config.cursorY--;
             }
             break;
-        case ARROW_DOWN:
+        case ARROW_DOWN: // moves down
             if (config.cursorY < config.numrows) {
                 config.cursorY++;
             }
             break;
     }
+    // sets the value to correct number
     row = (config.cursorY >= config.numrows) ? NULL : &config.currentRow[config.cursorY];
     rowLen = row ? row->size : 0;
     if (config.cursorX > rowLen) {
@@ -242,28 +246,28 @@ void moveCursor(int key) {
     }
 }
 
-char *prompt(char *prompt, void (callback)(char *, int)) {
+char *prompt(char *prompt, void (callback)(char *, int)) { // creates a prompt for the user
     size_t bufferSize = 128, bufferLen = 0;
     char *buffer = malloc(bufferSize);
     int c;
 
     buffer[0] = '\0';
     while (1) {
-        setStatusMessage(prompt, buffer);
+        setStatusMessage(prompt, buffer); // sets a status message and displays it
         rewriteScreen();
         c = readKeyPress();
-        if (c == DEL_KEY || c == CTRL_KEY('h') || c == BACKSPACE) {
+        if (c == DEL_KEY || c == CTRL_KEY('h') || c == BACKSPACE) { // delete a charcater
             if (bufferLen != 0) {
                 buffer[--bufferLen] = '\0';
             }
-        } else if (c == '\x1b') {
+        } else if (c == '\x1b') { // grabs sequnce for key press
             setStatusMessage("");
             if (callback) {
                 callback(buffer, c);
             }
             free(buffer);
             return NULL;
-        } else if (c == '\r') {
+        } else if (c == '\r') { // detects enter key
             if (bufferLen != 0) {
                 setStatusMessage("");
                 if (callback) {
@@ -271,7 +275,7 @@ char *prompt(char *prompt, void (callback)(char *, int)) {
                 }
                 return buffer;
             }
-        } else if (!iscntrl(c) && c < 128) {
+        } else if (!iscntrl(c) && c < 128) { // doubles the buffer size used
             if (bufferLen == bufferSize - 1) {
                 bufferSize *= 2;
                 buffer = realloc(buffer, bufferSize);
@@ -286,7 +290,7 @@ char *prompt(char *prompt, void (callback)(char *, int)) {
 }
 
 // file i/o
-void openFile(char *filename) {
+void openFile(char *filename) { // opens an input file by name 
     ssize_t lineLen;
     size_t lineCap = 0;
     char *line = NULL;
@@ -296,10 +300,10 @@ void openFile(char *filename) {
     config.filename = strdup(filename);
     fp = fopen(filename, "r");
     if (!fp) {
-        die("fopen");
+        die("fopen"); // dies if it can open for some reason
     }
 
-    while ((lineLen = getline(&line, &lineCap, fp)) != -1) {
+    while ((lineLen = getline(&line, &lineCap, fp)) != -1) { // writes the file to the editor
         while (lineLen > 0 && (line[lineLen - 1] == '\n' || line[lineLen - 1] == '\r'))
             lineLen--;
         insertRow(config.numrows, line, lineLen);
@@ -309,7 +313,7 @@ void openFile(char *filename) {
     config.dirty = 0;
 }
 
-char *rowsToString(int *bufferLen) {
+char *rowsToString(int *bufferLen) { // converts an entire row in the editor to a string and returns it
     int i, totalLen = 0;
     char *buffer, *p;
 
@@ -328,18 +332,18 @@ char *rowsToString(int *bufferLen) {
     return buffer;
 }
 
-void save() {
+void save() { // saves the file with a file name if it doesn't already have one
     int len, fd;
     char *buffer;
 
-    if (config.filename == NULL) {
+    if (config.filename == NULL) { // sets file name
         config.filename = prompt("Save as: %s (ESC to cancel)", NULL);
         if (config.filename == NULL) {
             setStatusMessage("Save aborted");
             return;
         }
     }
-    buffer = rowsToString(&len);
+    buffer = rowsToString(&len); // writes the strings to the disk
     fd = open(config.filename, O_RDWR | O_CREAT, 0644);
     if (fd != -1) {
         if (ftruncate(fd, len) != -1) {
@@ -358,7 +362,7 @@ void save() {
 }
 
 //Search
-void find() {
+void find() { // find a bit of text the user enters in the file open
     int savedCursorX = config.cursorX;
     int savedCursorY = config.cursorY;
     int savedColOffset = config.colOffset;
@@ -375,7 +379,7 @@ void find() {
     }
 }
 
-void findCallback(char *query, int key) {
+void findCallback(char *query, int key) { // This helps navigate the find function through all the different results
     static int lastMatch = -1, direction = 1;
     int i, current;
     char *match;
@@ -417,7 +421,7 @@ void findCallback(char *query, int key) {
 }
 
 // Set The Number Of Cols And Rows In The Config Struct
-int getWindowSize(int *rows, int *cols) {
+int getWindowSize(int *rows, int *cols) { // gets the window size of the terminal
     struct winsize ws;
 
     if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
@@ -437,11 +441,11 @@ int getCursorPosition(int *rows, int *cols) {
     char buffer[32];
     unsigned int i = 0;
     
-    if (write(STDOUT_FILENO, "\x1b[6n", 4) != 4) {
+    if (write(STDOUT_FILENO, "\x1b[6n", 4) != 4) { // writes the cursor
         return -1;
     }
     while (i < sizeof(buffer) - 1) {
-        if (read(STDIN_FILENO, &buffer[i], 1) != 1) {
+        if (read(STDIN_FILENO, &buffer[i], 1) != 1) { //finds the cursor
             break;
         } 
         if (buffer[i] == 'R') {
@@ -460,7 +464,7 @@ int getCursorPosition(int *rows, int *cols) {
 }
 
 // Append Buffer
-void bufAppend(struct buf *b, const char *s, int len) {
+void bufAppend(struct buf *b, const char *s, int len) { // add a string to the buffer for writing to the editor
     char *new = realloc(b->str, b->len + len);
 
     if (new == NULL) {
@@ -471,16 +475,17 @@ void bufAppend(struct buf *b, const char *s, int len) {
     b->len += len;
 }
 
-void bufFree(struct buf *b) {
+void bufFree(struct buf *b) { // frees the buffer
     free(b->str);
 }
 
 // Operations For The Rows
-void insertRow(int at, char *str, size_t len) {
+void insertRow(int at, char *str, size_t len) { // inserts a row into the editor
     if (at < 0 || at > config.numrows) { 
         return;
     }
-    config.currentRow = realloc(config.currentRow, sizeof(erow) * (config.numrows + 1));
+    config.currentRow = realloc(config.currentRow, sizeof(erow) * (config.numrows + 1)); // reallocs memory for the row
+    // moves the row in and moves the other rows to fit it in
     memmove(&config.currentRow[at + 1], &config.currentRow[at], sizeof(erow) * (config.numrows - at));
     config.currentRow[at].size = len;
     config.currentRow[at].str = malloc(len + 1);
@@ -493,7 +498,7 @@ void insertRow(int at, char *str, size_t len) {
     config.dirty++;
 }
 
-void updateRow(erow *row) {
+void updateRow(erow *row) { // updates a row with any user inputs and key presses
     int i, ind = 0, tabs = 0;
 
     for (i = 0; i < row->size; i++) {
@@ -517,7 +522,7 @@ void updateRow(erow *row) {
     row->renderSize = ind;
 }
 
-int cursorXToRenderX(erow *row, int cursorX) {
+int cursorXToRenderX(erow *row, int cursorX) { // changes the cursor position to the render position 
     int i, renderX = 0;
 
     for (i = 0; i < cursorX; i++) {
@@ -529,7 +534,7 @@ int cursorXToRenderX(erow *row, int cursorX) {
     return renderX;
 }
 
-int renderXToCursorX(erow *row, int renderX) {
+int renderXToCursorX(erow *row, int renderX) { // changes the render position to the cursor position
     int i, cursorX = 0;
 
     for (i = 0; i < row->size; i++) {
@@ -544,7 +549,7 @@ int renderXToCursorX(erow *row, int renderX) {
     return i;
 }
 
-void rowInsertChar(erow *row, int at, int c) {
+void rowInsertChar(erow *row, int at, int c) { // insert a char into a row
     if (at < 0 || at > row->size) {
         at = row->size;
     }
@@ -556,7 +561,7 @@ void rowInsertChar(erow *row, int at, int c) {
     config.dirty++;
 }
 
-void rowDeleteChar(erow *row, int at) {
+void rowDeleteChar(erow *row, int at) { // delete a char from a row when the user press backspace
     if (at < 0 || at >= row->size) {
         return;
     }
@@ -566,12 +571,12 @@ void rowDeleteChar(erow *row, int at) {
     config.dirty++;
 }
 
-void freeRow(erow *row) {
+void freeRow(erow *row) { // free memory from an unused row
     free(row->render);
     free(row->str);
 }
 
-void deleteRow(int at) {
+void deleteRow(int at) { // delete an entire row when the user deletes it
     if (at < 0 || at >= config.numrows) {
         return;
     }
@@ -581,7 +586,7 @@ void deleteRow(int at) {
     config.dirty++;
 }
 
-void rowAppendString(erow *row, char *str, size_t len) {
+void rowAppendString(erow *row, char *str, size_t len) { // adds a string onto the end of a row 
     row->str = realloc(row->str, row->size + len + 1);
     memcpy(&row->str[row->size], str, len);
     row->size += len;
@@ -591,7 +596,7 @@ void rowAppendString(erow *row, char *str, size_t len) {
 }
 
 // Edit Methods
-void insertChar(int c) {
+void insertChar(int c) { // insert a char into the editor
     if (config.cursorY == config.numrows) {
         insertRow(config.numrows, "", 0);
     }
@@ -599,7 +604,7 @@ void insertChar(int c) {
     config.cursorX++;
 }
 
-void deleteChar() {
+void deleteChar() { // deletes a char from the editor
     erow *row;
 
     if (config.cursorY == config.numrows) {
@@ -620,7 +625,7 @@ void deleteChar() {
     }
 }
 
-void insertNewLine() {
+void insertNewLine() { // inserts a new line when the user presses enter
     erow *row;
 
     if (config.cursorX == 0) {
@@ -638,7 +643,7 @@ void insertNewLine() {
 }
 
 // Write The Output
-void rewriteScreen() {
+void rewriteScreen() { // rewrites the screen with any updates the user does like pressing keys
     struct buf b = BUF_INIT;
     char buffer[32];
 
@@ -655,7 +660,7 @@ void rewriteScreen() {
     bufFree(&b);
 }
 
-void writeRow(struct buf *b) {
+void writeRow(struct buf *b) { // writes rows to the buffer
     int i, welcomeLen, padding, len, fileRow;
     char welcome[80];
     
@@ -694,7 +699,7 @@ void writeRow(struct buf *b) {
     }
 }
 
-void scroll() {
+void scroll() { // implements a scroll for longer files 
     config.renderX = 0;
     if (config.cursorY < config.numrows) {
         config.renderX = cursorXToRenderX(&config.currentRow[config.cursorY], config.cursorX);
@@ -713,7 +718,7 @@ void scroll() {
     }
 }
 
-void writeStatus(struct buf *b) {
+void writeStatus(struct buf *b) { // write a status for the file to tell the user what is happening and what needs to happen
     char status[80], renderStatus[80];
     int len = snprintf(status, sizeof(status), "%.20s - %d lines %s", 
         config.filename ? config.filename : "No File", config.numrows,
@@ -737,7 +742,7 @@ void writeStatus(struct buf *b) {
     bufAppend(b, "\r\n", 2);
 }
 
-void setStatusMessage(const char *str, ...) {
+void setStatusMessage(const char *str, ...) { // sets a status message for the user to read
     va_list args;
 
     va_start(args, str);
@@ -746,7 +751,7 @@ void setStatusMessage(const char *str, ...) {
     config.statusMsgTime = time(NULL);
 }
 
-void writeMessageBar(struct buf *b) {
+void writeMessageBar(struct buf *b) { // writes to the message bar for the user
     int msgLen;
 
     bufAppend(b, "\x1b[K", 3);
